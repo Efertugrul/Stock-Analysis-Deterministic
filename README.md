@@ -52,7 +52,7 @@ source("main.R")
 ### **Simulated Stock Price Paths**
 Here are example results from the Monte Carlo and GARCH simulations. These paths represent potential future stock prices for a period of 365 days.
 
-![Simulated Stock Price Paths](.montecarlo/img/plot1.png)
+![Simulated Stock Price Paths](/montecarlo/img/plot1.png)
 
 ---
 
