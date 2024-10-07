@@ -1,0 +1,402 @@
+---
+title: "montecarlo"
+author: "EE"
+date: "2024-10-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, results = "markup", include = TRUE)
+
+```
+
+
+```{r}
+library(quantmod)
+library(ggplot2)
+library(reshape2)
+#from Yahoo take an example stock
+getSymbols("AAPL", src = "yahoo", from = "2015-01-01", to = "2020-01-01")
+prices <- Cl(AAPL)
+head(prices)
+
+
+
+```
+```{r}
+#compared to previous day
+returns <- dailyReturn(prices)
+
+#threshold to determine significance
+limit <- 0.01
+
+#categorize by quality
+states <- ifelse(returns > limit, "Up", ifelse(returns < -limit,
+                                               "Down", "Stable"))
+
+#add it to df
+
+price_data  <- data.frame(Date = index(prices), Price = coredata(prices), Returns = returns, State = states)
+
+#now all in one
+colnames(price_data)[c(2,3,4)] <- c("Price", "Returns", "State")
+head(price_data)
+
+```
+```{r}
+#naturally we need the transition matrix now for Markov chain
+price_data$NextState <- c(price_data$State[-1], NA)
+#last row gone
+price_data <- na.omit(price_data)
+
+
+#freq  table
+transition_count <- table(price_data$State, price_data$NextState)
+#transition matrix rows adding up to one as per probability requirements
+transition_matrix <- prop.table(transition_count, 1)
+transition_matrix
+```
+
+
+
+
+```{r}
+#verify
+sums <- rowSums(transition_matrix)
+all(sums == 1)
+
+
+```
+```{r}
+
+#quick visuals for the matrix
+transition_df <- melt(transition_matrix)
+
+
+#heatmap best fit 
+ggplot(transition_df, aes(Var1, Var2, fill = value)) +
+  geom_tile() + 
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(x = "Current State", y = "Next State", fill = "Probability") +
+  theme_minimal()
+
+
+
+
+```
+```{r}
+#moving onto Monte Carlo simulation with basis of our transition matrix
+
+#single price path
+simulate_price_path <- function(initial_price, initial_state, transition_matrix, n_days, up_pct = 0.01, down_pct = 0.01){
+  price <- initial_price
+  state <- initial_state
+  price_path<- numeric(n_days)
+  price_path[1] <- price
+  
+  #state names
+  states<- rownames(transition_matrix)
+  
+  for(day in 2:n_days){
+    
+    #next state based on current (respective probs)
+    next_state <- sample(states, 1, prob = transition_matrix[state,])
+    
+    #adjust price
+    if(next_state == "Up"){
+      price <- price* (1 + up_pct)
+      
+    }
+    else if(next_state == "Down") {
+      price <- price * (1-down_pct)
+      
+    }
+    #updated price
+    price_path[day] <- price
+    #update state
+    state <- next_state
+  }
+  return(price_path)
+}
+
+#Example simulation
+
+
+initial_price <- tail(price_data$Price,1)
+initial_state <- tail(price_data$State, 1)
+n_days <- 365
+
+simulated_path <- simulate_price_path(initial_price, initial_state, transition_matrix, n_days)
+
+simulated_path
+
+```
+
+
+```{r}
+#now this will run for multiple simulations not only one 
+run_monte_carlo<- function(initial_price, initial_state, transition_matrix, n_days, n_simulations, up_pct = 0.01, down_pct = 0.01){
+  
+  #stores all
+  all_sim <- matrix(NA, nrow = n_days, ncol = n_simulations)
+  
+  
+  #run 
+  for(i in 1:n_simulations){
+    all_sim[, i]<- simulate_price_path(initial_price, initial_state, transition_matrix, n_days, up_pct, down_pct)
+  }
+  
+  return(all_sim)
+  
+}
+
+
+#example run (1000)
+
+n_simulations <- 1000
+all_sim <- run_monte_carlo(initial_price, initial_state, transition_matrix, n_days, n_simulations)
+
+head(all_sim)
+
+```
+```{r}
+simulated_df <- as.data.frame(all_sim)
+
+
+#for plotting 
+simulated_df$Day <- 1:n_days
+
+
+simulated_long <- melt(simulated_df, id = "Day")
+
+#plot first 10 paths
+
+ggplot(simulated_long[simulated_long$variable %in% paste0("V", 1:10),], aes(x = Day, y = value, color=variable)) + geom_line() +
+  labs(title = "Monte Carlo of stock prices", x = "Days", y = "Simulated Stock Price") +
+  theme_minimal()
+
+```
+```{r}
+#As we can see, as Monte Carlo is Stochastic statistics this data itself doesn't help us make conclusions especially with a sample of 10 paths, let's do more
+
+
+summary_stats<- data.frame(Day = 1:n_days,Mean=apply(all_sim,1,mean),
+                           Median=apply(all_sim,1,median),
+                           Lower95=apply(all_sim, 1,quantile, probs=0.025),
+                           Upper95=apply(all_sim,1,quantile,probs=0.975))
+
+
+#now plot mean and confint
+
+ggplot(summary_stats, aes(x = Day)) +
+  geom_line(aes(y=Mean), color = "blue")+
+  geom_ribbon(aes(ymin=Lower95, ymax=Upper95), alpha=0.2) +
+  labs(title = "Simulated Stock Price with 95% Confidence Interval", x = "Days", y = "Stock Price") +
+  theme_minimal()
+
+
+
+```
+
+```{r}
+#now that we have metrics well annotated and ready,let's move on to Value at Risk calculation (Of course all this had a purpose)
+
+#final day prices from all sims
+
+final_prices<- all_sim[n_days, ]
+
+
+#VaR
+VaR_95 <- quantile(final_prices, probs = 0.05)
+VaR_95
+
+
+
+```
+```{r}
+#Now more in depth, looking at conditioanal VaR
+
+CVaR_prices <- final_prices[final_prices < VaR_95]
+
+#calculate CVaR as avg
+
+CVaR_95<- mean(CVaR_prices)
+CVaR_95
+
+
+```
+
+
+```{r}
+#Not done yet, now calculate Maximum Drawdown which is essentially worst case decline from peak 
+max_drawdown_fun <- function(price_path){
+  peak <- max(price_path)
+  trough<- min(price_path[which(price_path == peak): length(price_path)])
+  
+  max_drawdown<- (peak- trough) / peak 
+  return(max_drawdown)
+  
+}
+
+
+#apply to all
+
+max_dds<- apply(all_sim,2, max_drawdown_fun)
+
+#calculate avg and worst case dd
+avg_max_dd <- mean(max_dds)
+worst_case <- max(max_dds)
+
+
+avg_max_dd
+worst_case
+
+
+
+```
+
+
+```{r}
+#plot the dist
+
+ggplot(data.frame(Price= final_prices), aes(x = Price))+
+  geom_histogram(bins = 30, fill= "blue", alpha = 0.7)+
+  geom_vline(xintercept = VaR_95, color = "red", linetype = "dashed", size = 1.5)+
+  geom_vline(xintercept = CVaR_95, color = "orange", linetype = "dashed", size = 1.5) +
+  labs(title = "Distribution of Simulated Final Prices", x = "Final Stock Price",
+       y = "Frequency") +
+  theme_minimal() +
+  annotate("text", x=VaR_95, y = max(hist(final_prices, plot = FALSE)$counts),
+           label = paste("VaR (95%):", round(VaR_95, 2)), hjust = 1.5, color = "red") +
+  annotate("text", x = CVaR_95, y = max(hist(final_prices, plot = FALSE)$counts), 
+           label = paste("CVaR (95%):", round(CVaR_95, 2)), hjust = -0.5, color = "orange")
+
+
+
+```
+```{r}
+#let's check for sensitivity analysis for different percentages 
+sens_analysis <- function(up_pct_vals, down_pct_vals, n_simulations, n_days){
+  results <- data.frame()
+  
+  for(up in up_pct_vals){
+    for(down in down_pct_vals){
+      
+      #run sim
+      sim <- run_monte_carlo(initial_price, initial_state, transition_matrix, n_days, n_simulations, up, down)
+      
+      
+      #calculate VaR
+      final <-sim[n_days, ]
+      VaR_95 <- quantile(final, probs = 0.05)
+      CVaR_95<- mean(final[final < VaR_95])
+      
+      #store
+      results <- rbind(results, data.frame(up, down, VaR_95, CVaR_95))
+    }
+  }
+  return(results)
+}
+
+
+
+#analysis 
+up_pct_vals <- c(0.01,0.02,0.05)
+down_pct_vals<- c(0.01,0.02,0.05)
+sens_res<- sens_analysis(up_pct_vals, down_pct_vals, n_simulations,n_days)
+sens_res
+#This provides great info!
+
+
+```
+```{r}
+#Now let's do stress testing to understand prices react to extreme conditions
+
+#We modify tr matrix to increase probability of "Down"
+
+stress_trans_matrix <- transition_matrix
+stress_trans_matrix["Up", "Down"] <- 0.4
+stress_trans_matrix["Down", "Down"] <- 0.7
+stress_trans_matrix<- prop.table(stress_trans_matrix,1) #normalize
+
+stress_sims <- run_monte_carlo(initial_price, initial_state, stress_trans_matrix, n_days, n_simulations, up_pct = 0.01, down_pct = 0.1)
+
+
+#calculate value at risk and conditioned var
+
+final_prices_stress<- stress_sims[n_days, ]
+var_95_stress<- quantile(final_prices_stress, probs=0.05)
+
+cvar_95_stress <- mean(final_prices_stress[final_prices_stress < var_95_stress])
+
+var_95_stress
+cvar_95_stress
+
+
+
+
+```
+
+
+```{r}
+#Finally let's try GARCH modeling to test for varying variances
+library(rugarch)
+
+# Specify GARCH(1,1) model
+garch_spec <- ugarchspec(variance.model = list(garchOrder = c(1, 1)),
+                         mean.model = list(armaOrder = c(1, 0)))
+
+# Fit GARCH model to stock returns
+garch_fit <- ugarchfit(spec = garch_spec, data = returns)
+
+# Simulate future returns with GARCH model
+garch_sim <- ugarchsim(garch_fit, n.sim = n_days, m.sim = n_simulations)
+
+# Extract simulated prices
+simulated_returns <- fitted(garch_sim)
+# Make sure garch_price_paths is a matrix with columns for each simulation
+garch_price_paths <- matrix(garch_price_paths, nrow = n_days, ncol = n_simulations)
+
+# Convert the price paths matrix into a data frame
+garch_simulated_df <- as.data.frame(garch_price_paths)
+garch_simulated_df$Day <- 1:n_days  # Add the Day column for plotting
+
+# Reshape the data for ggplot, treating each column as a separate simulation (V1, V2, ..., Vn)
+library(reshape2)
+garch_long <- melt(garch_simulated_df, id = "Day")
+
+# Check the reshaped data (this should now contain variables like V1, V2, etc.)
+
+# Plot the first 10 GARCH-simulated paths
+ggplot(garch_long[garch_long$variable %in% paste0("V", 1:10),], aes(x = Day, y = value, color = variable)) +
+  geom_line() +
+  labs(title = "GARCH-Simulated Stock Price Paths", x = "Days", y = "Simulated Stock Price") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+#volatility check from GARCH(common)
+
+
+sim_volatility<- sigma(garch_sim)
+
+volatility_df <- as.data.frame(sim_volatility)
+
+volatility_df$Day <- 1:n_days
+
+
+#reshape
+
+volatility_long <- melt(volatility_df, id = "Day")
+
+
+#plot
+ggplot(volatility_long[volatility_long$variable %in% paste0("V", 1:10),], aes(x = Day, y = value, color = variable)) +
+  geom_line() +
+  labs(title = "GARCH-Simulated Volatility Paths", x = "Days", y = "Simulated Volatility") +
+  theme_minimal()
+
+```
