@@ -63,28 +63,28 @@ The project also calculates key risk metrics:
 
 Example results for risk metrics:
 
-![VaR and CVaR](./plot2.png)
+![VaR and CVaR](/montecarlo/img/plot2.png)
 
 ---
 
 ## **Confidence Interval**
 A plot showing the stock price simulation with a 95% confidence interval over 365 days:
 
-![Simulated Stock Price with 95% Confidence Interval](./plot3.png)
+![Simulated Stock Price with 95% Confidence Interval](/montecarlo/img/plot3.png)
 
 ---
 
 ## **Transition Matrix**
 This heatmap visualizes the transition probabilities between stock price movement states (Up, Down, Stable).
 
-![Transition Matrix Heatmap](./plot4.png)
+![Transition Matrix Heatmap](/montecarlo/img/plot4.png)
 
 ---
 
 ## **GARCH-Simulated Volatility**
 This plot shows the volatility paths simulated using the GARCH(1,1) model over 365 days.
 
-![GARCH-Simulated Volatility Paths](./plot5.png)
+![GARCH-Simulated Volatility Paths](/montecarlo/img/plot5.png)
 
 ---
 
@@ -94,5 +94,5 @@ Feel free to fork this project, submit issues, or contribute by making pull requ
 ---
 
 ## **License**
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache License - see the LICENSE file for details.
 
