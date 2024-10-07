@@ -52,7 +52,7 @@ source("main.R")
 ### **Simulated Stock Price Paths**
 Here are example results from the Monte Carlo and GARCH simulations. These paths represent potential future stock prices for a period of 365 days.
 
-![Simulated Stock Price Paths](./images/simulated_paths.png)
+![Simulated Stock Price Paths](./plot1.png)
 
 ---
 
@@ -63,7 +63,28 @@ The project also calculates key risk metrics:
 
 Example results for risk metrics:
 
-![VaR and CVaR](./images/var_cvar_plot.png)
+![VaR and CVaR](./plot2.png)
+
+---
+
+## **Confidence Interval**
+A plot showing the stock price simulation with a 95% confidence interval over 365 days:
+
+![Simulated Stock Price with 95% Confidence Interval](./plot3.png)
+
+---
+
+## **Transition Matrix**
+This heatmap visualizes the transition probabilities between stock price movement states (Up, Down, Stable).
+
+![Transition Matrix Heatmap](./plot4.png)
+
+---
+
+## **GARCH-Simulated Volatility**
+This plot shows the volatility paths simulated using the GARCH(1,1) model over 365 days.
+
+![GARCH-Simulated Volatility Paths](./plot5.png)
 
 ---
 
